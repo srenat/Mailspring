@@ -2,10 +2,19 @@ name: Build for macOS
 
 on:
   workflow_dispatch:
+    inputs:
+      mailsync_release:
+        description: 'Release tag on srenat/Mailspring-Sync holding mailsync-macos.tar.gz'
+        required: true
+        default: 'phase0-mailsync-ea0b3a9'
+
+permissions:
+  contents: read
 
 jobs:
   build-macos:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: macos-26
@@ -16,12 +25,6 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Fail if branch is not main
-        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/master'
-        run: |
-          echo "This workflow should not be triggered with workflow_dispatch on a branch other than main"
-          exit 1
-
       - name: Checkout Repo
         uses: actions/checkout@v7
 
@@ -33,51 +36,32 @@ jobs:
             ./app/node_modules
           key: ${{ matrix.os }}-${{ runner.arch }}-deps-${{ hashFiles('yarn.lock') }}-${{ hashFiles('app/package-lock.json') }}
 
+      - name: Download Mailsync
+        run: |
+          mkdir -p mailsync-prebuilt
+          curl -fsSL --retry 3 -o mailsync-prebuilt/mailsync.tar.gz \
+            "https://github.com/srenat/Mailspring-Sync/releases/download/${{ inputs.mailsync_release }}/mailsync-macos.tar.gz"
+          shasum -a 256 mailsync-prebuilt/mailsync.tar.gz
+
       - name: Install Dependencies
         run: npm ci
-
-      - name: Setup Codesigning
-        uses: apple-actions/import-codesign-certs@v7
-        with:
-          p12-file-base64: ${{ secrets.APPLE_CODESIGN_P12 }}
-          p12-password: ${{ secrets.APPLE_CODESIGN_KEY_PASSWORD }}
-
-      - name: Setup Provisioning Profile
-        run: |
-          echo "APPLE_PROVISIONING_PROFILE_PATH=${{ runner.temp }}/Mailspring.provisionprofile" >> $GITHUB_ENV
-          echo $APPLE_PROVISIONING_PROFILE_B64 | base64 --decode > "${{ runner.temp }}/Mailspring.provisionprofile"
         env:
-          APPLE_PROVISIONING_PROFILE_B64: ${{ secrets.APPLE_PROVISIONING_PROFILE_B64 }}
-
-      - name: Setup AWS CLI
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          MAILSYNC_PREBUILT_DIR: ${{ github.workspace }}/mailsync-prebuilt
 
       - name: Lint
         run: npm run lint:check
 
       - name: Build
-        run: SIGN_BUILD=true DEBUG=electron-packager,electron-osx-sign,electron-notarize* npm run build
-        env:
-          APPLE_ID_ASC_PROVIDER: ${{ secrets.APPLE_ID_ASC_PROVIDER }}
-          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-          APPLE_PROVISIONING_PROFILE_PATH: ${{ env.APPLE_PROVISIONING_PROFILE_PATH }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: DEBUG=electron-packager npm run build
 
       - name: Rename artifacts
-        if: matrix.arch == 'arm64'
         run: |
-          mv app/dist/Mailspring.zip app/dist/Mailspring-AppleSilicon.zip
+          mv app/dist/Mailspring.zip app/dist/Mailspring-macos-${{ matrix.arch }}.zip
 
-      - name: Sync artifacts to S3 bucket
-        run: |
-          aws s3 sync app/dist/ "s3://mailspring-builds/client/$(git rev-parse --short=8 HEAD)/osx" \
-            --acl public-read \
-            --exclude "*" --include *.zip
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: Mailspring-macos-${{ matrix.arch }}
+          path: app/dist/Mailspring-macos-${{ matrix.arch }}.zip
+          retention-days: 7
+          if-no-files-found: error

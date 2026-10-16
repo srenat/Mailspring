@@ -107,6 +107,24 @@ function downloadMailsync() {
   });
 }
 
+// CI builds point MAILSYNC_PREBUILT_DIR at a mailsync.tar.gz built from our own
+// Mailspring-Sync fork, so the packaged app ships that engine instead of the S3 one.
+function unpackPrebuiltMailsync(prebuiltDir) {
+  const src = path.resolve(prebuiltDir, 'mailsync.tar.gz');
+  if (!fs.existsSync(src)) {
+    console.error(`MAILSYNC_PREBUILT_DIR is set but ${src} does not exist.`);
+    process.exit(1);
+  }
+  console.log(`\n-- Unpacking prebuilt Mailsync from ${src} into ./app --`);
+  targz.decompress({ src, dest: 'app/' }, err => {
+    if (err) {
+      console.error(`\nEncountered an error unpacking: ${err}`);
+      process.exit(1);
+    }
+    console.log(`\nUnpackaged Mailsync into ./app.`);
+  });
+}
+
 // For speed, we cache app/node_modules. However, we need to
 // be sure to do a full rebuild of native node modules when the
 // Electron version changes. To do this we check a marker file.
@@ -163,7 +181,9 @@ async function run() {
 
   // if the user hasn't cloned the mailsync module, download
   // the binary for their operating system that was shipped to S3.
-  if (!fs.existsSync('./mailsync/build.sh')) {
+  if (process.env.MAILSYNC_PREBUILT_DIR) {
+    unpackPrebuiltMailsync(process.env.MAILSYNC_PREBUILT_DIR);
+  } else if (!fs.existsSync('./mailsync/build.sh')) {
     console.log(`\n-- Downloading the last released version of Mailspring mailsync --`);
     downloadMailsync();
   } else {
