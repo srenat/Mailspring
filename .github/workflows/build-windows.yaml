@@ -7,9 +7,19 @@ on:
         description: 'Release tag on srenat/Mailspring-Sync holding mailsync-windows.tar.gz'
         required: true
         default: 'phase0-mailsync-ea0b3a9'
+  # workflow_dispatch only resolves workflows on the default branch; this push trigger
+  # registers the fork's workflow from phase0-spike and runs it when the build inputs change.
+  push:
+    branches: [phase0-spike]
+    paths:
+      - '.github/workflows/build-windows.yaml'
+      - 'scripts/postinstall.js'
 
 permissions:
   contents: read
+
+env:
+  MAILSYNC_RELEASE: ${{ inputs.mailsync_release || 'phase0-mailsync-ea0b3a9' }}
 
 jobs:
   build:
@@ -38,7 +48,7 @@ jobs:
         run: |
           mkdir -p mailsync-prebuilt
           curl -fsSL --retry 3 -o mailsync-prebuilt/mailsync.tar.gz \
-            "https://github.com/srenat/Mailspring-Sync/releases/download/${{ inputs.mailsync_release }}/mailsync-windows.tar.gz"
+            "https://github.com/srenat/Mailspring-Sync/releases/download/${MAILSYNC_RELEASE}/mailsync-windows.tar.gz"
           sha256sum mailsync-prebuilt/mailsync.tar.gz
 
       - name: Install Dependencies
