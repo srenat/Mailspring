@@ -1,5 +1,5 @@
 import { test, expect, ElectronApplication, Page } from '@playwright/test';
-import { launchApp, closeApp, findComposer, closeComposerWindows } from '../helpers';
+import { launchApp, closeApp, openThread, findComposer, closeComposerWindows } from '../helpers';
 
 let electronApp: ElectronApplication;
 let mainWindow: Page;
@@ -18,7 +18,9 @@ test.afterEach(async () => {
 });
 
 test('fluent toolbar button opens composer', async () => {
-  await mainWindow.locator('[data-testid="fluent-compose"]').click();
+  // The toolbar role only renders once a thread is selected.
+  await openThread(mainWindow, 0);
+  await mainWindow.locator('[data-testid="fluent-compose"]').first().click();
 
   const composerPage = await findComposer(electronApp);
   expect(composerPage).not.toBeNull();
