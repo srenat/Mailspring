@@ -1,0 +1,14 @@
+{
+  "name": "fluent-spike",
+  "version": "0.1.0",
+  "main": "./lib/main",
+  "description": "Phase 0 spike: a Fluent UI v9 button rendered inside the Mailspring renderer.",
+  "license": "GPL-3.0",
+  "private": true,
+  "engines": {
+    "mailspring": "*"
+  },
+  "windowTypes": {
+    "default": true
+  }
+}
